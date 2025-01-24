@@ -4,9 +4,9 @@
 
   ;; Solicita ao usuario o sistema de coordenadas
   (initget "31982 31983")
-  (setq epsg-code (getkword "\nEscolha o sistema de coordenadas (31982/31983) [31983]: "))
+  (setq epsg-code (getkword "\nEscolha o sistema de coordenadas (31982/31983) [31982]: "))
   (if (null epsg-code)
-    (setq epsg-code "31983") ; Define como 31983 se o usuário nao escolher
+    (setq epsg-code "31982") ; Define como 31982 se o usuário nao escolher
   )
   
   (princ (strcat "\n\nSistema de coordenadas escolhido: EPSG:" epsg-code))
