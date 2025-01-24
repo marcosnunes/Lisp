@@ -37,8 +37,12 @@
           <style>
             body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f0f0; }
             .container { text-align: center; padding: 20px; background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-            #mapButton { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; }
-            #mapButton:hover { background-color: #45a049; }
+            .button-container { display: flex; justify-content: center; margin-top: 20px; gap: 10px;}
+            .button-container button { padding: 10px 20px; color: white; border: none; border-radius: 4px; cursor: pointer; }
+             #mapButton { background-color: #4CAF50; }
+             #mapButton:hover { background-color: #45a049; }
+            #streetViewButton { background-color: #2196F3; } /* Cor azul para o botão Street View */
+            #streetViewButton:hover { background-color: #1976D2; }
             #coordinates { margin-top: 10px; font-size: 1.2em; }
           </style>
         </head>
@@ -48,7 +52,10 @@
               <div id='coordinates'>
                 <p>Aguarde... Calculando coordenadas.</p>
               </div>
-              <button id='mapButton' disabled>Abrir no Google Maps</button>
+              <div class='button-container'>
+                <button id='mapButton' disabled>Abrir no Google Maps</button>
+                <button id='streetViewButton' disabled>Abrir no Street View</button>
+                </div>
             </div>
           <script>
              function convertUTMtoLatLon(easting, northing, epsgCode) {
@@ -69,29 +76,36 @@
               document.getElementById('coordinates').innerHTML = '<p>Latitude: ' + latitude.toFixed(6) + '<br>Longitude: ' + longitude.toFixed(6) + '</p>';
 
               var mapButton = document.getElementById('mapButton');
+              var streetViewButton = document.getElementById('streetViewButton');
               mapButton.disabled = false;
+              streetViewButton.disabled = false;
               mapButton.textContent = 'Abrir no Google Maps';
+              streetViewButton.textContent = 'Abrir no Street View';
+
 
               // Formata a URL corretamente com coordenadas decimais
               
-                var latDeg = Math.abs(latitude);
-                var latMin = (latDeg - Math.floor(latDeg)) * 60;
-                var latSec = (latMin - Math.floor(latMin)) * 60;
-                var latDir = latitude >= 0 ? 'N' : 'S';
-                var longDeg = Math.abs(longitude);
-                var longMin = (longDeg - Math.floor(longDeg)) * 60;
-                var longSec = (longMin - Math.floor(longMin)) * 60;
-                var longDir = longitude >= 0 ? 'E' : 'W';
-             
-                var latString = Math.floor(latDeg) + '°' + Math.floor(latMin) + \"'\" + latSec.toFixed(1) + '\"' + latDir;
-                var longString = Math.floor(longDeg) + '°' + Math.floor(longMin) + \"'\" + longSec.toFixed(1) + '\"' + longDir;
-                
+              var latDeg = Math.abs(latitude);
+              var latMin = (latDeg - Math.floor(latDeg)) * 60;
+              var latSec = (latMin - Math.floor(latMin)) * 60;
+              var latDir = latitude >= 0 ? 'N' : 'S';
+              var longDeg = Math.abs(longitude);
+              var longMin = (longDeg - Math.floor(longDeg)) * 60;
+              var longSec = (longMin - Math.floor(longMin)) * 60;
+              var longDir = longitude >= 0 ? 'E' : 'W';
+           
+              var latString = Math.floor(latDeg) + '°' + Math.floor(latMin) + \"'\" + latSec.toFixed(1) + '\"' + latDir;
+              var longString = Math.floor(longDeg) + '°' + Math.floor(longMin) + \"'\" + longSec.toFixed(1) + '\"' + longDir;
 
-                var url = 'https://www.google.com/maps/place/' + encodeURIComponent(latString) + '+' + encodeURIComponent(longString) + '/@' + latitude.toFixed(8) + ',' + longitude.toFixed(8) + ',17z';
-                 
+              var mapUrl = 'https://www.google.com/maps/place/' + encodeURIComponent(latString) + '+' + encodeURIComponent(longString) + '/@' + latitude.toFixed(8) + ',' + longitude.toFixed(8) + ',17z';
+              var streetViewUrl = 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=' + latitude.toFixed(8) + ',' + longitude.toFixed(8);
 
               mapButton.onclick = function() {
-                 window.open(url); // Remove '_blank' para abrir na mesma janela
+                 window.open(mapUrl);
+              };
+
+              streetViewButton.onclick = function() {
+                   window.open(streetViewUrl);
               };
             }
 
