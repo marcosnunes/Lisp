@@ -3,4 +3,4 @@ Códigos Lisp úteis
 
 A Lisp psetupcopy.lsp copia as configurações de Page Setup do layout nomeado como Setup_A3 para todos os outros layouts do desenho
 
-A Lisp AbrirGoogleMaps.lsp abre a localização correspondente a um ponto clicado na tela do cad no google maps. É necessário escolher entre os sistemas de coordenadas Sirgas2000 22S ou Sirgas200 23S dependendo de qual for a região UTM do desenho.
+A Lisp AbrirGoogleMaps.lsp abre a localização correspondente a um ponto clicado na tela do cad no google maps. É necessário escolher entre os sistemas de coordenadas Sirgas2000 22S ou Sirgas2000 23S dependendo de qual for a região UTM do desenho.
