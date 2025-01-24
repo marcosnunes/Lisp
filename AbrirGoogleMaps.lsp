@@ -29,7 +29,7 @@
         <html lang='pt-br'>
         <head>
           <meta charset='UTF-8'>
-          <title>Localizaçao no Google Maps</title>
+          <title>Localizacao no Google Maps</title>
           <meta http-equiv='Cache-Control' content='no-cache, no-store, must-revalidate'>
           <meta http-equiv='Pragma' content='no-cache'>
           <meta http-equiv='Expires' content='0'>
@@ -44,7 +44,7 @@
         </head>
         <body>
             <div class='container'>
-              <h1>Localizaçao no Google Maps</h1>
+              <h1>Localizacao no Google Maps</h1>
               <div id='coordinates'>
                 <p>Aguarde... Calculando coordenadas.</p>
               </div>
