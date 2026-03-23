@@ -1,15 +1,8 @@
-(defun c:AbrirGoogleMaps (/ pt coordenadas easting northing lat long url wshell proj4-script temp-html-file html-content file epsg-code)
+(defun c:AbrirGoogleMaps (/ pt coordenadas easting northing proj4-script temp-html-file file)
   (princ "\n\nIniciando c:AbrirGoogleMaps...")
   (princ "\n")
 
-  ;; Solicita ao usuario o sistema de coordenadas
-  (initget "31982 31983")
-  (setq epsg-code (getkword "\nEscolha o sistema de coordenadas (31982/31983) [31982]: "))
-  (if (null epsg-code)
-    (setq epsg-code "31982") ; Define como 31982 se o usuário nao escolher
-  )
-  
-  (princ (strcat "\n\nSistema de coordenadas escolhido: EPSG:" epsg-code))
+  (princ "\nModo automatico: inferencia de zona SIRGAS 2000 / UTM (Brasil).")
   (princ "\n")
 
   (setq pt (getpoint "\nSelecione um ponto para abrir no Google Maps: "))
@@ -19,17 +12,28 @@
       (setq easting (float (car coordenadas)))
       (setq northing (float (cadr coordenadas)))
 
-      (princ (strcat "\n  Easting:  " (rtos easting 2 3)))
-      (princ (strcat "\n  Northing: " (rtos northing 2 3)))
-      (princ "\n")
+      ;; Faixas UTM tipicas para reduzir abertura de pontos inconsistentes.
+      (if (or (< easting 100000.0) (> easting 900000.0) (< northing 0.0) (> northing 10000000.0))
+        (progn
+          (princ "\nCoordenadas fora da faixa UTM esperada (E: 100000-900000, N: 0-10000000).")
+          (princ "\nVerifique UCS/CRS antes de continuar.")
+          (setq pt nil)
+        )
+      )
 
-      ;; Inicia bloco de conversao de UTM para lat/long com Proj4js e gera o botao
-      (setq proj4-script (strcat
-        "<!DOCTYPE html>
+      (if pt
+        (progn
+          (princ (strcat "\n  Easting:  " (rtos easting 2 3)))
+          (princ (strcat "\n  Northing: " (rtos northing 2 3)))
+          (princ "\n")
+
+          ;; Inicia bloco de conversao de UTM para lat/long com Proj4js e gera o botao
+          (setq proj4-script (strcat
+            "<!DOCTYPE html>
         <html lang='pt-br'>
         <head>
           <meta charset='UTF-8'>
-          <title>Localizacao no Google Maps</title>
+          <title>Localizaçao no Google Maps</title>
           <meta http-equiv='Cache-Control' content='no-cache, no-store, must-revalidate'>
           <meta http-equiv='Pragma' content='no-cache'>
           <meta http-equiv='Expires' content='0'>
@@ -37,54 +41,105 @@
           <style>
             body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f0f0; }
             .container { text-align: center; padding: 20px; background-color: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-            .button-container { display: flex; justify-content: center; margin-top: 20px; gap: 10px;}
-            .button-container button { padding: 10px 20px; color: white; border: none; border-radius: 4px; cursor: pointer; }
-             #mapButton { background-color: #4CAF50; }
-             #mapButton:hover { background-color: #45a049; }
-            #streetViewButton { background-color: #2196F3; } /* Cor azul para o botão Street View */
-            #streetViewButton:hover { background-color: #1976D2; }
+            #mapButton { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px; }
+            #mapButton:hover { background-color: #45a049; }
             #coordinates { margin-top: 10px; font-size: 1.2em; }
           </style>
         </head>
         <body>
             <div class='container'>
-              <h1>Localizacao no Google Maps</h1>
+              <h1>Localizaçao no Google Maps</h1>
               <div id='coordinates'>
                 <p>Aguarde... Calculando coordenadas.</p>
               </div>
-              <div class='button-container'>
-                <button id='mapButton' disabled>Abrir no Google Maps</button>
-                <button id='streetViewButton' disabled>Abrir no Street View</button>
-                </div>
+              <button id='mapButton' disabled>Abrir no Google Maps</button>
             </div>
           <script>
-             function convertUTMtoLatLon(easting, northing, epsgCode) {
-                var proj4String = '';
-               if(epsgCode === '31982'){
-                  proj4String = '+proj=utm +zone=22 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs';
-               } else if (epsgCode === '31983') {
-                 proj4String = '+proj=utm +zone=23 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs';
+             function getEpsgCode(hemisphere, zone) {
+              return hemisphere === 'S' ? (31960 + zone) : (31954 + zone);
+            }
+
+            function inferBestZone(easting, northing) {
+              // Heuristica para Brasil sem georreferencia: escolhe hemisferio por Northing
+              // e avalia zonas 18..25, priorizando continuidade e fallback em S22.
+              var hemisphere = northing < 1200000 ? 'N' : 'S';
+              var zones = [18, 19, 20, 21, 22, 23, 24, 25];
+              var brazilBBox = { minLat: -34.0, maxLat: 6.0, minLon: -74.5, maxLon: -32.0 };
+              var candidates = [];
+
+              for (var i = 0; i < zones.length; i++) {
+                var zone = zones[i];
+                var proj4String = '+proj=utm +zone=' + zone + (hemisphere === 'S' ? ' +south' : '') + ' +ellps=GRS80 +units=m +no_defs';
+                var sourceCrs = 'SIRGAS2000_UTM_' + hemisphere + zone;
+                proj4.defs(sourceCrs, proj4String);
+
+                var dest = proj4(sourceCrs, 'EPSG:4326', [easting, northing]);
+                var lat = dest[1];
+                var lon = dest[0];
+                var insideBrazil = (lat >= brazilBBox.minLat && lat <= brazilBBox.maxLat && lon >= brazilBBox.minLon && lon <= brazilBBox.maxLon);
+
+                if (insideBrazil) {
+                  candidates.push({ zone: zone, hemisphere: hemisphere, lat: lat, lon: lon });
                 }
+              }
 
-              proj4.defs('EPSG:' + epsgCode, proj4String);
-              var sourceCoords = [easting, northing];
-              var destCoords = proj4('EPSG:' + epsgCode, 'EPSG:4326', sourceCoords);
+              // Persistencia por sessao do navegador para manter coerencia em pontos sequenciais.
+              var lastZone = parseInt(localStorage.getItem('agm_last_zone') || '22', 10);
+              if (isNaN(lastZone) || lastZone < 18 || lastZone > 25) {
+                lastZone = 22;
+              }
+
+              var best = null;
+              if (candidates.length > 0) {
+                var bestDist = 999;
+                for (var j = 0; j < candidates.length; j++) {
+                  var d = Math.abs(candidates[j].zone - lastZone);
+                  if (d < bestDist) {
+                    bestDist = d;
+                    best = candidates[j];
+                  }
+                }
+              }
+
+              // Fallback seguro para S22 quando nao houver candidato no bbox do Brasil.
+              if (!best) {
+                var fallbackZone = 22;
+                var fallbackProj = '+proj=utm +zone=' + fallbackZone + (hemisphere === 'S' ? ' +south' : '') + ' +ellps=GRS80 +units=m +no_defs';
+                var fallbackCrs = 'SIRGAS2000_UTM_' + hemisphere + fallbackZone;
+                proj4.defs(fallbackCrs, fallbackProj);
+                var fallbackDest = proj4(fallbackCrs, 'EPSG:4326', [easting, northing]);
+                best = { zone: fallbackZone, hemisphere: hemisphere, lat: fallbackDest[1], lon: fallbackDest[0] };
+              }
+
+              localStorage.setItem('agm_last_zone', String(best.zone));
+              best.candidateCount = candidates.length;
+              return best;
+            }
+
+            function convertUTMtoLatLon(easting, northing) {
+              if (easting < 100000 || easting > 900000 || northing < 0 || northing > 10000000) {
+                document.getElementById('coordinates').innerHTML = '<p>Coordenadas UTM fora da faixa esperada.</p>';
+                return;
+              }
+
+              var best = inferBestZone(easting, northing);
+              var zone = best.zone;
+              var hemisphere = best.hemisphere;
+              var utmCode = hemisphere + zone;
+              var epsgCode = getEpsgCode(hemisphere, zone);
+              var latitude = best.lat;
+              var longitude = best.lon;
               
-              var latitude = destCoords[1];
-              var longitude = destCoords[0];
+              var heuristicNote = best.candidateCount > 1
+                ? '<br><small>Zona inferida por heuristica (' + best.candidateCount + ' candidatas no Brasil).</small>'
+                : '<br><small>Zona inferida automaticamente.</small>';
 
-              document.getElementById('coordinates').innerHTML = '<p>Latitude: ' + latitude.toFixed(6) + '<br>Longitude: ' + longitude.toFixed(6) + '</p>';
+              document.getElementById('coordinates').innerHTML = '<p>Sistema inferido: SIRGAS 2000 / UTM ' + utmCode + ' (EPSG:' + epsgCode + ')<br>Latitude: ' + latitude.toFixed(6) + '<br>Longitude: ' + longitude.toFixed(6) + heuristicNote + '</p>';
 
               var mapButton = document.getElementById('mapButton');
-              var streetViewButton = document.getElementById('streetViewButton');
               mapButton.disabled = false;
-              streetViewButton.disabled = false;
               mapButton.textContent = 'Abrir no Google Maps';
-              streetViewButton.textContent = 'Abrir no Street View';
 
-
-              // Formata a URL corretamente com coordenadas decimais
-              
               var latDeg = Math.abs(latitude);
               var latMin = (latDeg - Math.floor(latDeg)) * 60;
               var latSec = (latMin - Math.floor(latMin)) * 60;
@@ -93,52 +148,48 @@
               var longMin = (longDeg - Math.floor(longDeg)) * 60;
               var longSec = (longMin - Math.floor(longMin)) * 60;
               var longDir = longitude >= 0 ? 'E' : 'W';
-           
+             
               var latString = Math.floor(latDeg) + '°' + Math.floor(latMin) + \"'\" + latSec.toFixed(1) + '\"' + latDir;
               var longString = Math.floor(longDeg) + '°' + Math.floor(longMin) + \"'\" + longSec.toFixed(1) + '\"' + longDir;
-
-              var mapUrl = 'https://www.google.com/maps/place/' + encodeURIComponent(latString) + '+' + encodeURIComponent(longString) + '/@' + latitude.toFixed(8) + ',' + longitude.toFixed(8) + ',17z';
-              var streetViewUrl = 'https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=' + latitude.toFixed(8) + ',' + longitude.toFixed(8);
+              var url = 'https://www.google.com/maps/place/' + encodeURIComponent(latString) + '+' + encodeURIComponent(longString) + '/@' + latitude.toFixed(8) + ',' + longitude.toFixed(8) + ',17z';
 
               mapButton.onclick = function() {
-                 window.open(mapUrl);
-              };
-
-              streetViewButton.onclick = function() {
-                   window.open(streetViewUrl);
+                window.open(url);
               };
             }
 
             window.onload = function() {
-              convertUTMtoLatLon(" (rtos easting 2 10) ", " (rtos northing 2 10) ",  \"" epsg-code "\");
+              convertUTMtoLatLon(" (rtos easting 2 10) ", " (rtos northing 2 10) ");
             }
           </script>
         </body>
         </html>"
-      ))
+          ))
 
-      ;; Cria o arquivo HTML temporário
-      (setq temp-html-file (vl-filename-mktemp "temp_proj4.html"))
+          ;; Cria o arquivo HTML temporário
+          (setq temp-html-file (vl-filename-mktemp "temp_proj4.html"))
 
-      ;; Escreve o HTML no arquivo
-      (setq file (open temp-html-file "w"))
-      (if file
-        (progn
-          (write-line proj4-script file)
-          (close file)
-        )
-        (progn
-          (princ (strcat "\n  Erro ao criar/escrever no arquivo HTML: " temp-html-file))
-          (exit) ; Aborta se nao conseguir criar o arquivo
+          ;; Escreve o HTML no arquivo
+          (setq file (open temp-html-file "w"))
+          (if file
+            (progn
+              (write-line proj4-script file)
+              (close file)
+            )
+            (progn
+              (princ (strcat "\n  Erro ao criar/escrever no arquivo HTML: " temp-html-file))
+              (exit)
+            )
+          )
+          (princ "\n")
+
+          ;; Abre o navegador padrao usando o comando BROWSER
+          (command "_.BROWSER" temp-html-file)
+
+          (princ "\n\nHTML gerado e aberto no navegador. Clique no botao para abrir o Google Maps.")
+          (princ "\n")
         )
       )
-      (princ "\n")
-
-      ;; Abre o navegador padrao usando o comando BROWSER
-      (command "_.BROWSER" temp-html-file) ; Abre o arquivo HTML no navegador
-      
-      (princ "\n\nHTML gerado e aberto no navegador. Clique no botao para abrir o Google Maps.")
-      (princ "\n")
     )
     (princ "\nNenhum ponto selecionado.")
   )
